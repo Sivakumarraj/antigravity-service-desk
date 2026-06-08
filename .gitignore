@@ -1,0 +1,53 @@
+# =============================================================================
+# .gitignore — Antigravity IT Service Desk
+# =============================================================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+ENV/
+.env
+
+# --- Build / dist ---
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# --- Testing ---
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.log
+
+# --- IDE ---
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# --- Pipeline output (generated at runtime — do not commit) ---
+antigravity_apps/service_desk/output/
+
+# --- Secrets / local config overrides ---
+.env.local
+*.secret
+secrets/
+
+# --- OS ---
+Thumbs.db
+.DS_Store
+desktop.ini
