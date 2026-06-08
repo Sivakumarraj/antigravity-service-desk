@@ -1,0 +1,30 @@
+# registries/it_service_desk.hocon
+network_name = "IT_Service_Desk_AutoClassify"
+version = "1.0.0"
+
+# Enterprise Fallback Configuration Policy
+llm_default_config {
+  provider = "google"
+  model_name = "gemini-1.5-flash"
+  fallbacks = [
+    { provider = "google", model_name = "gemini-1.5-pro" }
+  ]
+}
+
+agents {
+  # Stage 2 Execution Boundary
+  ingestion_agent {
+    role = "PII Data Cleansing and Redaction Specialist"
+    system_prompt = "You process raw user communications. Extract the core technical root cause, redact direct identifiers, and pass clean context forward via sly_data boundary layers."
+    can_delegate_to = ["structured_classifier_agent"]
+  }
+
+  # Stage 3 Execution Boundary with strict schema guardrails
+  structured_classifier_agent {
+    role = "Strict Enterprise JSON Structurer"
+    system_prompt = """Analyze the scrubbed system issue text. Output a strict JSON structure containing keys: 'category', 'priority', and 'justification'. 
+    Allowed categories: Network, Database, Hardware, IAM. 
+    Allowed priorities: HIGH, MEDIUM, LOW.
+    Do not output conversational text or markdown wrappers outside the JSON string."""
+  }
+}
