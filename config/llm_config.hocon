@@ -1,0 +1,5 @@
+# config/llm_config.hocon
+llm_default_config {
+  provider = "google"
+  model_name = "gemini-1.5-flash"
+}
