@@ -16,6 +16,7 @@ venv/
 env/
 ENV/
 .env
+.env.dev
 
 # --- Build / dist ---
 build/

@@ -34,7 +34,7 @@ def simulate_neuro_san_pipeline(raw_user_email: str):
     print("          [LLM] Calling google/gemini-1.5-flash ...")
     print("          [GUARDRAIL] Intercepting output string for Pydantic parsing...")
     
-          # Verification Guardrail Execution
+        # Verification Guardrail Execution
     is_valid, validated_json, error_msg = TicketGuardrail.validate_output(mock_raw_llm_response)
     
     # FORCE THE FAILURE TRACE: Since mock_raw_llm_response contains 'CRITICAL'
