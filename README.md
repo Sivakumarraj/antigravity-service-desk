@@ -1,59 +1,72 @@
-# Neuro SAN Studio Enterprise IT Service Desk Pipeline
+# Neuro SAN Studio — Enterprise IT Service Desk Pipeline
 
 An enterprise-grade, fault-tolerant multi-agent IT helpdesk automation pipeline built natively on the **Cognizant Neuro SAN Studio Platform**. This application is structured as a decoupled standalone project utilizing the modern `uv` toolchain to orchestrate, validate, and secure enterprise IT workflows with zero human intervention.
 
+---
+
 ## 🚀 Key Production Challenges Solved
-1. **Resilient Vendor Fallback Networks (HOCON)**: Implements declarative vendor-agnostic fallback trees natively mapped inside platform property arrays to survive mid-workflow token throttling (`status_429`) by instantly shifting from OpenAI to Google Gemini endpoints.
-2. **Deterministic Output Guardrails (Pydantic v2)**: Deploys strict data runtime boundary interceptors to eliminate LLM structural hallucinations and format inconsistencies (e.g., automatically trapping illegal priority states like `CRITICAL` and driving self-healing correction prompt routines).
-3. **Secure Pipeline Boundaries (Regex Scrubbing)**: Employs local multi-pass data-cleansing pre-processors to intercept and mask corporate PII and raw infrastructure credentials before payload transmission to external APIs.
+
+1. **Resilient Vendor Fallback (HOCON)**: Implements declarative vendor-agnostic fallback chains inside `registries/it_service_desk.hocon` to survive mid-workflow token throttling (`status_429`) — instantly shifting from Google Gemini to fallback providers.
+2. **Deterministic Output Guardrails (Pydantic v2)**: Deploys strict enum-locked runtime interceptors to eliminate LLM hallucinations — automatically trapping illegal values like `CRITICAL` and driving self-healing correction prompt routines.
+3. **Secure Pipeline Boundaries (Regex Scrubbing)**: Employs multi-pass PII pre-processors (5 passes) to intercept and mask phone numbers, inline credentials (`password=`, `token=`), prose credentials (`password was X`), email headers, and email addresses before any payload transmission.
 
 ---
 
-## 📂 Project Architecture Layout
+## 📂 Project Structure
+
 ```text
 neuro-san-service-desk-pipeline/
 ├── config/
-│   ├── llm_config.hocon          # Core Neuro SAN Studio model registry settings
-│   └── pipeline_network.hocon   # Multi-agent 5-tier fallback cascade matrix
+│   ├── llm_config.hocon          # Core Neuro SAN Studio LLM model config
+│   └── plugins.hocon             # Observability and logging plugin config
+├── registries/
+│   ├── manifest.hocon            # Agent network registry manifest
+│   └── it_service_desk.hocon    # Multi-agent network with fallback chain
+├── mcp/
+│   └── mcp_info.hocon            # MCP server tool configuration
 ├── tools/
-│   ├── __init__.py
-│   ├── guardrails.py            # Strict Pydantic v2 ServiceNow ticket schemas
-│   └── ticket_parser.py         # Regex PII scrubber & ServiceNow payload builder
-├── .env                          # Local session environment credentials boundary
-├── pyproject.toml                # Native uv dependencies declaration blueprint
-├── uv.lock                       # Light-speed package lock mapping asset
-└── app.py                        # Execution runtime entrypoint pipeline wrapper
+│   ├── guardrails.py            # Pydantic v2 enum-locked ServiceNow schema
+│   └── ticket_parser.py         # 5-pass PII scrubber & ServiceNow payload builder
+├── .env                          # Local API credentials (not committed to git)
+├── pyproject.toml                # uv project dependencies
+├── uv.lock                       # Dependency lockfile
+└── app.py                        # Pipeline execution entrypoint
 ```
 
 ---
 
-## 🛠️ Installation & Getting Started
+## 🛠️ Installation & Quick Start
 
-This workspace is fully optimized for the Astral `uv` environment project manager.
+Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) and Python 3.14+.
 
-### 1. Clone & Initialize the Workspace
-```powershell
-git clone https://github.com
-cd neuro-san-service-desk-pipeline
+### 1. Clone the Repository
+```bash
+git clone https://github.com/Sivakumarraj/antigravity-service-desk.git
+cd antigravity-service-desk
 ```
 
-### 2. Activate Environment & Sync Dependencies
-```powershell
-uv venv
-.\.venv\Scripts\activate
+### 2. Sync Dependencies
+```bash
 uv sync
 ```
 
-### 3. Mount Credentials Boundary
-Create a local `.env` file within the root directory and map your Google AI Studio token parameters:
+### 3. Set Your API Key
+Create a `.env` file in the project root:
 ```text
-GOOGLE_API_KEY="AIzaSyYourActualFreeKeyHere..."
+GEMINI_API_KEY="your-google-ai-studio-key-here"
+```
+Get a free key at: https://aistudio.google.com/app/apikey
+
+### 4. Run the Pipeline
+```bash
+uv run python app.py
 ```
 
 ---
 
-## 📊 Live Verification Run Audit Trace
-Running `uv run python app.py` executes the entire multi-stage multi-agent orchestration simulation locally, outputting this pristine trace matrix:
+## 📊 Live Output
+
+Running `uv run python app.py` produces this output:
 
 ```text
 ========================================================================
@@ -78,17 +91,17 @@ Running `uv run python app.py` executes the entire multi-stage multi-agent orche
 
 ================ FINAL SERVICENOW METADATA PAYLOAD ================
 {
-  "short_description": "Our prod Postgres cluster (10.12.5.200) started throwing connection timeouts. ",
-  "description": "Our prod Postgres cluster (10.12.5.200) started throwing connection timeouts. \n    Call my mobile at [REDACTED] for verification. Temp verification password definition was dbPass123.",
+  "short_description": "Our prod Postgres cluster (10.12.5.200) started throwing connection timeouts.",
+  "description": "Our prod Postgres cluster (10.12.5.200) started throwing connection timeouts. \n    Call my mobile at [REDACTED] for verification. Temp verification password=[REDACTED]",
   "category": "Database",
   "subcategory": "Performance",
   "urgency": "1",
   "impact": "1",
   "priority": "1",
   "state": "1",
-  "caller_id": "alice.wong",
+  "caller_id": "api_ingest_agent",
   "assignment_group": "NOC-L2-AutoClassify",
-  "comments": "Auto-ingested via Antigravity AI Pipeline.\nClassifier priority=HIGH, category=Database.",
+  "comments": "Auto-ingested via Neuro SAN Pipeline.\nClassifier priority=HIGH, category=Database.",
   "work_notes": "PII scrubbed by TicketParserTool before ingestion."
 }
 ====================================================================
@@ -98,7 +111,42 @@ Pipeline Execution Complete. State saved.
 
 ---
 
-## 🏆 Open Source Status & Contributions
-- **Development Tooling**: Built completely on top of `neuro-san-studio` structural runtime interfaces.
-- **Reference Tracking**: Formatted as an independent reference platform example per guidance from `@ofrancon` in PR discussion hooks.
-- **License**: MIT — Cognizant AI Lab Open Ecosystem.
+## 🛡️ PII Redaction — What Gets Scrubbed
+
+| PII Type | Example Input | Output |
+|---|---|---|
+| Email header lines | `From: alice.wong@acmecorp.com` | *(line removed)* |
+| Structured credentials | `password=Tr0ub4dor&3` | `password=[REDACTED]` |
+| Prose credentials | `password was dbPass123` | `password=[REDACTED]` |
+| Phone numbers | `+1-800-555-0199` | `[REDACTED]` |
+| Email addresses | `bob.smith@corp.com` | `[REDACTED]` |
+
+---
+
+## 🤖 Agent Network — `registries/it_service_desk.hocon`
+
+| Agent | Role |
+|---|---|
+| `ingestion_agent` | PII data cleansing and redaction specialist |
+| `structured_classifier_agent` | Strict JSON classifier (category + priority + justification) |
+
+LLM fallback chain: `gemini-1.5-flash` → `gemini-1.5-pro`
+
+---
+
+## ✅ Guardrail Enforcement
+
+The `TicketGuardrail` enforces:
+- `category` must be one of: `Network`, `Database`, `Hardware`, `IAM`
+- `priority` must be one of: `HIGH`, `MEDIUM`, `LOW`
+- Extra/hallucinated fields → immediately rejected (`extra = "forbid"`)
+- Justification containing raw credentials → rejected
+
+---
+
+## 🏆 Open Source Status
+
+- **Framework**: Built on [`neuro-san-studio`](https://github.com/cognizant-ai-lab/neuro-san-studio)
+- **Community**: Listed in [Neuro SAN Studio Community Projects](https://github.com/cognizant-ai-lab/neuro-san-studio#community-projects)
+- **Reviewed by**: `@ofrancon` — Cognizant AI Lab (`lgtm, thanks!`)
+- **License**: MIT
