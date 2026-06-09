@@ -34,19 +34,17 @@ def simulate_neuro_san_pipeline(raw_user_email: str):
     print("          [LLM] Calling google/gemini-1.5-flash ...")
     print("          [GUARDRAIL] Intercepting output string for Pydantic parsing...")
     
-        # Verification Guardrail Execution
-    is_valid, validated_json, error_msg = TicketGuardrail.validate_output(mock_raw_llm_response)
+    # app.py (Update the validation block in Stage 3)
+    is_valid, validated_json, error_msg, metrics = TicketGuardrail.validate_output(mock_raw_llm_response)
     
-    # FORCE THE FAILURE TRACE: Since mock_raw_llm_response contains 'CRITICAL'
     if "CRITICAL" in mock_raw_llm_response or not is_valid:
-        print(f"          [!] Guardrail Loop Triggered: Value error, Invalid priority 'CRITICAL'. Allowed: ['HIGH', 'MEDIUM', 'LOW']")
+        print(f"          [!] Guardrail Loop Triggered: Value error, Invalid priority 'CRITICAL'")
         print("          Automatically re-routing back to Gemini for correction protocol...")
         
-        # Overwrite validated_json with the clean, corrected data structure
         corrected_response = '{"category": "Database", "priority": "HIGH", "justification": "Production Postgres cluster is fully unreachable."}'
-        is_valid, validated_json, error_msg = TicketGuardrail.validate_output(corrected_response)
-        
-        print("          [GUARDRAIL] [PASSED] Validation cleared successfully on attempt 2.\n")
+        is_valid, validated_json, error_msg, metrics = TicketGuardrail.validate_output(corrected_response)
+        print("          [GUARDRAIL] [PASSED] Validation cleared successfully on attempt 2.")
+        print(f"          [FinOps Analytics] Latency: {metrics['latency_seconds']}s | Cost: ${metrics['estimated_cost_usd']} USD\n")
 
     # Final Structure Export Setup
     print("[Stage 4] Building Final ServiceNow Incident Payload...")
