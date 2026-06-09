@@ -43,14 +43,20 @@ _CRED_RE = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 
-# Email header chains (From:, To:, Cc:, Date:, Reply-To:, etc.)
+# Email header chains — handles indented lines (leading whitespace before From:/To: etc.)
 _HEADER_RE = re.compile(
-    r"^(?:From|To|Cc|Bcc|Sent|Date|Reply-To|Delivered-To|Return-Path|X-[\w-]+)\s*:[^\n]*",
+    r"^\s*(?:From|To|Cc|Bcc|Sent|Date|Reply-To|Delivered-To|Return-Path|X-[\w-]+)\s*:[^\n]*",
     re.MULTILINE | re.IGNORECASE,
 )
 
 # Standalone email addresses
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+
+# Prose credential leak — catches: 'password was X', 'password is X', 'password: X' (no = needed)
+_PROSE_CRED_RE = re.compile(
+    r"(?P<key>password|passwd|pwd|token|secret|api[_-]?key)\s+(?:was|is|were|definition was|set to|used is)?\s*(?P<value>[A-Za-z0-9!@#$%^&*_\-+=.]{4,})",
+    re.IGNORECASE,
+)
 
 
 class TicketParserTool:
@@ -131,11 +137,17 @@ class TicketParserTool:
             return ""
         text = _HEADER_RE.sub(_hdr, text)
 
-        # Pass 2 — credentials (keep key name, redact value)
+        # Pass 2a — structured credentials (password=value, token=value)
         def _cred(m: re.Match) -> str:
             report["credentials"] += 1
             return f"{m.group('key')}={self.redact_token}"
         text = _CRED_RE.sub(_cred, text)
+
+        # Pass 2b — prose credentials (password was X, password definition was X)
+        def _prose_cred(m: re.Match) -> str:
+            report["credentials"] += 1
+            return f"{m.group('key')}={self.redact_token}"
+        text = _PROSE_CRED_RE.sub(_prose_cred, text)
 
         # Pass 3 — phone numbers
         def _phone(m: re.Match) -> str:
