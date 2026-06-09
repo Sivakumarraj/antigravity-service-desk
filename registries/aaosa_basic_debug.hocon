@@ -14,16 +14,9 @@
 #
 # END COPYRIGHT
 
-# This file is NOT an agent network HOCON.
-# It defines a set of key-value pairs for substitution, typically used in agent network HOCON files.
-# Each key can be referenced in agent configs using the ${key} syntax.
-# Do not define agents or tools directly here—this file only provides reusable values.
-
-include "aaosa_basic.hocon"
+# This file defines debug-mode key-value pairs for substitution in agent network HOCON files.
+# Reference values using ${key} syntax in agent configs.
 
 debug_mode = """Note: you are in debug mode. Report any feedback you think will be useful for debugging,
 like any errors you encountered, any exceptions that were raised, or any ambiguity or unexpected behavior.
 Also include suggestions for improvements to the prompts. Add that feedback in a [DEBUG] section."""
-
-# Append debug instructions to the original aaosa instructions.
-aaosa_instructions += "\n" ${debug_mode}
