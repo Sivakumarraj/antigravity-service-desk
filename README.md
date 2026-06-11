@@ -1,152 +1,242 @@
-# Neuro SAN Studio — Enterprise IT Service Desk Pipeline
+# Enterprise IT Service Desk — Neuro SAN Community Project
 
-An enterprise-grade, fault-tolerant multi-agent IT helpdesk automation pipeline built natively on the **Cognizant Neuro SAN Studio Platform**. This application is structured as a decoupled standalone project utilizing the modern `uv` toolchain to orchestrate, validate, and secure enterprise IT workflows with zero human intervention.
+> **A native [Neuro SAN](https://github.com/cognizant-ai-lab/neuro-san) multi-agent pipeline
+> that automatically classifies IT support requests into structured ServiceNow incident
+> payloads — with 5-pass PII redaction, LLM-powered classification, and deterministic
+> coded-tool output validation.**
+
+[![Neuro SAN](https://img.shields.io/badge/Neuro%20SAN-Community%20Project-blue)](https://github.com/cognizant-ai-lab/neuro-san-studio)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-green)](https://python.org)
+[![LLM](https://img.shields.io/badge/LLM-Gemini%202.5%20Flash-orange)](https://ai.google.dev)
+[![uv](https://img.shields.io/badge/Managed%20by-uv-purple)](https://github.com/astral-sh/uv)
 
 ---
 
-## 🚀 Key Production Challenges Solved
+## Overview
 
-1. **Resilient Vendor Fallback (HOCON)**: Implements declarative vendor-agnostic fallback chains inside `registries/it_service_desk.hocon` to survive mid-workflow token throttling (`status_429`) — instantly shifting from Google Gemini to fallback providers.
-2. **Deterministic Output Guardrails (Pydantic v2)**: Deploys strict enum-locked runtime interceptors to eliminate LLM hallucinations — automatically trapping illegal values like `CRITICAL` and driving self-healing correction prompt routines.
-3. **Secure Pipeline Boundaries (Regex Scrubbing)**: Employs multi-pass PII pre-processors (5 passes) to intercept and mask phone numbers, inline credentials (`password=`, `token=`), prose credentials (`password was X`), email headers, and email addresses before any payload transmission.
+This project is a community contribution to
+[Neuro SAN Studio](https://github.com/cognizant-ai-lab/neuro-san-studio) — Cognizant
+AI Lab's open-source multi-agent orchestration platform.
+
+It solves a real enterprise problem: **IT helpdesk teams receive hundreds of unstructured
+support emails per day** containing mixed PII, jargon, and ambiguous priorities. This
+pipeline transforms those raw emails into clean, structured ServiceNow incident records
+automatically — with no human triage required.
 
 ---
 
-## 📂 Project Structure
+## Architecture
 
-```text
-neuro-san-service-desk-pipeline/
-├── config/
-│   ├── llm_config.hocon          # Core Neuro SAN Studio LLM model config
-│   └── plugins.hocon             # Observability and logging plugin config
-├── registries/
-│   ├── manifest.hocon            # Agent network registry manifest
-│   └── it_service_desk.hocon    # Multi-agent network with fallback chain
-├── mcp/
-│   └── mcp_info.hocon            # MCP server tool configuration
-├── tools/
-│   ├── guardrails.py            # Pydantic v2 enum-locked ServiceNow schema
-│   └── ticket_parser.py         # 5-pass PII scrubber & ServiceNow payload builder
-├── .env                          # Local API credentials (not committed to git)
-├── pyproject.toml                # uv project dependencies
-├── uv.lock                       # Dependency lockfile
-└── app.py                        # Pipeline execution entrypoint
+```
+User Input (raw IT email)
+        │
+        ▼
+┌───────────────────┐
+│  it_service_desk  │  Front orchestrator agent (LLM)
+│  (front agent)    │  Coordinates the full pipeline
+└────────┬──────────┘
+         │
+         ▼
+┌───────────────────┐
+│   pii_scrubber    │  Coded Tool (deterministic, no LLM)
+│                   │  5-pass regex: headers, credentials,
+│                   │  prose creds, phones, email addresses
+└────────┬──────────┘
+         │  clean_text (PII-free)
+         ▼
+┌───────────────────┐
+│ ticket_classifier │  LLM Agent (gemini-2.5-flash)
+│                   │  Strict controlled vocabulary:
+│                   │  category: Network|Database|Hardware|IAM
+│                   │  priority: HIGH|MEDIUM|LOW
+└────────┬──────────┘
+         │  category + priority + justification
+         ▼
+┌───────────────────┐
+│  ticket_builder   │  Coded Tool (deterministic, no LLM)
+│                   │  Maps to ServiceNow Incident Table fields
+│                   │  urgency/impact/priority (1/2/3 scale)
+└────────┬──────────┘
+         │
+         ▼
+ServiceNow Incident Payload (JSON)
 ```
 
 ---
 
-## 🛠️ Installation & Quick Start
+## Key Features
 
-Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) and Python 3.14+.
+| Feature | Implementation |
+|---|---|
+| **PII Redaction** | 5-pass regex: phone numbers, emails, passwords, tokens, headers |
+| **LLM Classification** | `gemini-2.5-flash` with strict prompt guardrails |
+| **Controlled Vocabulary** | Rejects any output outside `Network/Database/Hardware/IAM` × `HIGH/MEDIUM/LOW` |
+| **Coded Tools** | Deterministic `pii_scrubber` and `ticket_builder` — no LLM ambiguity |
+| **ServiceNow Ready** | Full Incident Table payload with urgency/impact/priority mapping |
+| **Native Neuro SAN** | `tools` array, `function`/`instructions`/`parameters`, `class` bindings |
 
-### 1. Clone the Repository
+---
+
+## Project Structure
+
+```
+antigravity-service-desk/
+├── registries/
+│   ├── it_service_desk.hocon   ← Native Neuro SAN agent network (main config)
+│   └── manifest.hocon          ← Registers the network with Neuro SAN
+├── tools/
+│   ├── pii_scrubber.py         ← Coded Tool: 5-pass PII redaction
+│   ├── ticket_builder.py       ← Coded Tool: ServiceNow payload builder
+│   ├── ticket_parser.py        ← Shared PII utilities (used by demo)
+│   └── guardrails.py           ← Pydantic v2 schema validation (used by demo)
+├── config/
+│   ├── llm_config.hocon        ← Default LLM: gemini-2.5-flash
+│   └── plugins.hocon           ← Neuro SAN plugin configuration
+├── demo.py                     ← Local simulation (does not require ns serve)
+├── pyproject.toml              ← uv project config with neuro-san dependency
+└── README.md
+```
+
+---
+
+## Prerequisites
+
+- **Python 3.11+**
+- **[uv](https://github.com/astral-sh/uv)** package manager
+- **Google API Key** — free tier at [aistudio.google.com](https://aistudio.google.com/app/apikey)
+
+---
+
+## Installation
+
 ```bash
 git clone https://github.com/Sivakumarraj/antigravity-service-desk.git
 cd antigravity-service-desk
-```
-
-### 2. Sync Dependencies
-```bash
 uv sync
 ```
 
-### 3. Set Your API Key
-Create a `.env` file in the project root:
-```text
-GEMINI_API_KEY="your-google-ai-studio-key-here"
-```
-Get a free key at: https://aistudio.google.com/app/apikey
+Set your API key:
 
-### 4. Run the Pipeline
 ```bash
-uv run python app.py
+# .env
+GOOGLE_API_KEY="AIza..."
+GEMINI_API_KEY="AIza..."
 ```
 
 ---
 
-## 📊 Live Output
+## Running with Neuro SAN
 
-Running `uv run python app.py` produces this output:
+Start the Neuro SAN agent server:
 
-```text
-========================================================================
-  Neuro SAN IT Service Desk -- Auto-Classifier Pipeline
-========================================================================
+```bash
+uv run ns serve
+```
 
-[Stage 1] Initializing Neuro SAN Core Studio Architecture Module...
-          Loaded configuration registry: config/llm_config.hocon
-          Active Core Endpoint Engine: google/gemini-1.5-flash
+In a separate terminal, chat with the IT Service Desk agent:
 
-[Stage 2] Triggering TicketParserTool: Cleaning PII Data Boundaries...
-          Scrubbing Operation complete. PII instances redacted safely.
+```bash
+uv run ns chat it_service_desk
+```
 
-[Stage 3] Routing Context to 'structured_classifier_agent' via Google Tier...
-          [LLM] Calling google/gemini-1.5-flash ...
-          [GUARDRAIL] Intercepting output string for Pydantic parsing...
-          [!] Guardrail Loop Triggered: Value error, Invalid priority 'CRITICAL'. Allowed: ['HIGH', 'MEDIUM', 'LOW']
-          Automatically re-routing back to Gemini for correction protocol...
-          [GUARDRAIL] [PASSED] Validation cleared successfully on attempt 2.
+Example session:
 
-[Stage 4] Building Final ServiceNow Incident Payload...
+```
+You: Our prod Postgres cluster started throwing connection timeouts.
+     Call me at +1-800-555-0199. Password was dbPass123.
 
-================ FINAL SERVICENOW METADATA PAYLOAD ================
-{
-  "short_description": "Our prod Postgres cluster (10.12.5.200) started throwing connection timeouts.",
-  "description": "Our prod Postgres cluster (10.12.5.200) started throwing connection timeouts. \n    Call my mobile at [REDACTED] for verification. Temp verification password=[REDACTED]",
+Agent: {
   "category": "Database",
-  "subcategory": "Performance",
+  "priority": "HIGH",
+  "short_description": "Our prod Postgres cluster started throwing connection timeouts.",
   "urgency": "1",
   "impact": "1",
-  "priority": "1",
-  "state": "1",
-  "caller_id": "api_ingest_agent",
-  "assignment_group": "NOC-L2-AutoClassify",
-  "comments": "Auto-ingested via Neuro SAN Pipeline.\nClassifier priority=HIGH, category=Database.",
-  "work_notes": "PII scrubbed by TicketParserTool before ingestion."
+  ...
 }
-====================================================================
-
-Pipeline Execution Complete. State saved.
 ```
 
 ---
 
-## 🛡️ PII Redaction — What Gets Scrubbed
+## Running the Local Demo
 
-| PII Type | Example Input | Output |
+A standalone simulation (no `ns serve` required):
+
+```bash
+uv run python demo.py
+```
+
+Expected output:
+
+```
+[Stage 1] Initializing Neuro SAN Core Studio Architecture Module...
+          Active Core Endpoint Engine: google/gemini-2.5-flash
+
+[Stage 2] PII Scrubbing...
+          Scrubbing complete. PII instances redacted safely.
+
+[Stage 3] LLM Classification via gemini-2.5-flash...
+          [GUARDRAIL] Validation cleared successfully.
+
+[Stage 4] ServiceNow Payload Built.
+
+{
+  "short_description": "Our prod Postgres cluster started throwing connection timeouts.",
+  "category": "Database",
+  "priority": "1",
+  "urgency": "1",
+  ...
+}
+```
+
+---
+
+## Verifying the Neuro SAN Config
+
+```bash
+uv run ns check-config --hocon-path registries/it_service_desk.hocon
+```
+
+Expected result:
+
+```
+Working (1 unique config):
+  model: gemini-2.5-flash | it_service_desk, pii_scrubber, ticket_classifier, ticket_builder
+All LLM configurations are working.
+```
+
+---
+
+## PII Redaction — 5 Passes
+
+| Pass | Pattern | Example |
 |---|---|---|
-| Email header lines | `From: alice.wong@acmecorp.com` | *(line removed)* |
-| Structured credentials | `password=Tr0ub4dor&3` | `password=[REDACTED]` |
-| Prose credentials | `password was dbPass123` | `password=[REDACTED]` |
-| Phone numbers | `+1-800-555-0199` | `[REDACTED]` |
-| Email addresses | `bob.smith@corp.com` | `[REDACTED]` |
+| 1 | Email headers | `From: alice@acme.com` → `` |
+| 2a | Structured credentials | `password=dbPass123` → `password=[REDACTED]` |
+| 2b | Prose credentials | `password was dbPass123` → `password=[REDACTED]` |
+| 3 | Phone numbers | `+1-800-555-0199` → `[REDACTED]` |
+| 4 | Email addresses | `user@company.com` → `[REDACTED]` |
 
 ---
 
-## 🤖 Agent Network — `registries/it_service_desk.hocon`
+## ServiceNow Field Mapping
 
-| Agent | Role |
-|---|---|
-| `ingestion_agent` | PII data cleansing and redaction specialist |
-| `structured_classifier_agent` | Strict JSON classifier (category + priority + justification) |
-
-LLM fallback chain: `gemini-1.5-flash` → `gemini-1.5-pro`
-
----
-
-## ✅ Guardrail Enforcement
-
-The `TicketGuardrail` enforces:
-- `category` must be one of: `Network`, `Database`, `Hardware`, `IAM`
-- `priority` must be one of: `HIGH`, `MEDIUM`, `LOW`
-- Extra/hallucinated fields → immediately rejected (`extra = "forbid"`)
-- Justification containing raw credentials → rejected
+| Neuro SAN Priority | ServiceNow `urgency` | `impact` | `priority` |
+|---|---|---|---|
+| `HIGH` | 1 (High) | 1 (High) | 1 (Critical) |
+| `MEDIUM` | 2 (Medium) | 2 (Medium) | 2 (High) |
+| `LOW` | 3 (Low) | 3 (Low) | 3 (Moderate) |
 
 ---
 
-## 🏆 Open Source Status
+## Configuration
 
-- **Framework**: Built on [`neuro-san-studio`](https://github.com/cognizant-ai-lab/neuro-san-studio)
-- **Community**: Listed in [Neuro SAN Studio Community Projects](https://github.com/cognizant-ai-lab/neuro-san-studio#community-projects)
-- **Reviewed by**: `@ofrancon` — Cognizant AI Lab (`lgtm, thanks!`)
-- **License**: MIT
+All LLM and agent settings are in `registries/it_service_desk.hocon`. To change
+the model, update `llm_config.model_name`. Any model supported by Neuro SAN
+can be used — see the
+[Neuro SAN LLM reference](https://github.com/cognizant-ai-lab/neuro-san/blob/main/docs/agent_hocon_reference.md#model_name).
+
+---
+
+## License
+
+Apache License 2.0
