@@ -1,4 +1,4 @@
-# Append or update this line inside registries/manifest.hocon
+# registries/manifest.hocon
 networks = [
   "registries/it_service_desk.hocon"
 ]

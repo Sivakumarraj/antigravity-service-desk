@@ -1,16 +1,27 @@
 # registries/it_service_desk.hocon
 #
-# Enterprise IT Service Desk Auto-Classifier
+# Enterprise IT Service Desk — Auto-Classifier Agent Network
 # A native Neuro SAN multi-agent network for automated IT incident triage.
 #
 # Agent pipeline:
-#   it_service_desk (front agent)
-#       → pii_scrubber   (redacts phone numbers, credentials, email headers)
-#       → ticket_classifier (outputs structured ServiceNow-ready JSON)
+#   it_service_desk   (front orchestrator — entry point)
+#       → pii_scrubber      (coded tool — 5-pass regex PII redaction)
+#       → ticket_classifier (LLM agent — structured ServiceNow JSON output)
+#       → ticket_builder    (coded tool — builds final ServiceNow payload)
+#
+# Passes ns check-config with gemini-2.5-flash (verified).
+# Community project — see: https://github.com/Sivakumarraj/antigravity-service-desk
 
 llm_config {
     class = "gemini"
     model_name = "gemini-2.5-flash"
+}
+
+metadata {
+    description = """Enterprise IT helpdesk automation pipeline that receives raw support
+emails, redacts PII, classifies incidents by category and priority, and produces
+structured ServiceNow-ready incident payloads — with zero human intervention."""
+    tags = ["itsm", "servicenow", "pii", "enterprise", "it-helpdesk"]
 }
 
 tools = [
@@ -21,16 +32,16 @@ tools = [
     {
         name = "it_service_desk"
         function {
-            description = """An enterprise IT helpdesk orchestrator that receives raw IT
-support requests, routes them through a PII scrubbing stage, classifies the
-incident by category and priority, and returns a structured ServiceNow-ready
-incident payload — with zero human intervention."""
+            description = """Enterprise IT helpdesk orchestrator. Receives a raw IT support
+request (email, chat message, or incident report), routes it through a
+PII scrubbing stage, classifies the incident, and returns a structured
+ServiceNow incident payload — with zero human intervention."""
             parameters {
                 type = object
                 properties {
                     user_request {
                         type = string
-                        description = "Raw IT support request, email body, or incident description submitted by a user"
+                        description = "Raw IT support request, email body, or incident description from a user"
                     }
                 }
                 required = [
@@ -40,31 +51,35 @@ incident payload — with zero human intervention."""
         }
         instructions = """You are an enterprise IT helpdesk pipeline orchestrator.
 
-When you receive a user_request you MUST follow this exact three-step pipeline:
+When you receive a user_request you MUST execute this exact pipeline in order:
 
-Step 1: Call pii_scrubber with the raw user_request text.
-Step 2: Pass the scrubbed text output from Step 1 to ticket_classifier.
-Step 3: Return the final JSON classification result from ticket_classifier
-        directly to the user as your response.
+Step 1 — Call pii_scrubber with the raw user_request text.
+Step 2 — Pass the clean_text output from Step 1 to ticket_classifier.
+Step 3 — Pass the category, priority, and clean_text to ticket_builder.
+Step 4 — Return the final ServiceNow payload from ticket_builder to the user.
 
-Never skip or reorder steps. Never attempt to classify the ticket yourself.
-Always run the full pipeline before responding."""
+Rules:
+- Never skip or reorder steps.
+- Never classify the ticket yourself without calling ticket_classifier.
+- Never expose PII — always pass through pii_scrubber first.
+- Return the ticket_builder output exactly as-is."""
         tools = [
             "pii_scrubber"
             "ticket_classifier"
+            "ticket_builder"
         ]
     }
 
     # ------------------------------------------------------------------
-    # PII scrubber agent — removes sensitive data before LLM processing
+    # PII scrubber — coded tool (no LLM, pure regex, deterministic)
     # ------------------------------------------------------------------
     {
         name = "pii_scrubber"
         function {
-            description = """Removes personally identifiable information (PII) and sensitive
-credentials from raw IT support text before it is processed by any LLM.
-Redacts phone numbers, email addresses, passwords, API keys, bearer tokens,
-and email routing headers (From:, To:, Cc:, Date:)."""
+            description = """Coded tool. Removes PII and credentials from raw IT support text
+using 5-pass regex redaction before the text reaches any LLM. Handles:
+phone numbers, email addresses, structured credentials (password=X),
+prose credentials (password was X), and email header lines (From:, To:)."""
             parameters {
                 type = object
                 properties {
@@ -78,29 +93,19 @@ and email routing headers (From:, To:, Cc:, Date:)."""
                 ]
             }
         }
-        instructions = """You are a strict PII and credential redaction specialist.
-Your sole responsibility is to sanitize the provided text.
-
-Replace every occurrence of the following with the token [REDACTED]:
-- Phone numbers in any format (e.g. +1-800-555-0199, (512) 867-5309)
-- Email addresses (e.g. user@company.com)
-- Passwords, tokens, API keys, secrets, bearer tokens (structured or prose)
-  Examples: password=abc123, token: xyz, password was dbPass123
-- All email header lines beginning with From:, To:, Cc:, Bcc:, Date:, Reply-To:
-
-Return only the sanitized text. Do not add commentary or explanations."""
+        class = "tools.pii_scrubber.PiiScrubberTool"
     }
 
     # ------------------------------------------------------------------
-    # Ticket classifier agent — structured ServiceNow incident output
+    # Ticket classifier — LLM agent with strict output vocabulary
     # ------------------------------------------------------------------
     {
         name = "ticket_classifier"
         function {
-            description = """Classifies a PII-scrubbed IT support request into a validated
-ServiceNow incident structure. Enforces strict controlled vocabularies for
-category (Network, Database, Hardware, IAM) and priority (HIGH, MEDIUM, LOW)
-to eliminate LLM hallucinations and schema drift."""
+            description = """Classifies a PII-scrubbed IT support request into a structured
+incident definition. Enforces strict controlled vocabularies for category
+(Network, Database, Hardware, IAM) and priority (HIGH, MEDIUM, LOW) to
+eliminate LLM hallucinations and schema drift."""
             parameters {
                 type = object
                 properties {
@@ -122,7 +127,7 @@ exactly these three keys:
 {
   "category": "<exactly one of: Network, Database, Hardware, IAM>",
   "priority": "<exactly one of: HIGH, MEDIUM, LOW>",
-  "justification": "<single sentence explaining your classification>"
+  "justification": "<single sentence, max 200 characters>"
 }
 
 Category rules:
@@ -132,13 +137,46 @@ Category rules:
 - IAM:      login denied, access revoked, password reset needed, permission gap
 
 Priority rules:
-- HIGH:   production system down, data loss risk, 50+ users blocked, security breach
+- HIGH:   production system down, data loss risk, 50+ users affected, security breach
 - MEDIUM: degraded performance, workaround available, 10-50 users affected
 - LOW:    single user affected, cosmetic issue, non-urgent enhancement
 
-Rules:
-- Output ONLY the JSON object above — no markdown fences, no extra keys
-- Never use values outside the controlled vocabulary lists above
-- justification must be one sentence, maximum 200 characters"""
+Output ONLY the JSON object. No markdown fences. No explanatory text. No extra keys."""
+    }
+
+    # ------------------------------------------------------------------
+    # Ticket builder — coded tool (no LLM, builds final ServiceNow JSON)
+    # ------------------------------------------------------------------
+    {
+        name = "ticket_builder"
+        function {
+            description = """Coded tool. Builds a complete ServiceNow Incident Table JSON
+payload from the classifier's output. Maps Neuro SAN priority labels
+(HIGH/MEDIUM/LOW) to ServiceNow urgency/impact/priority fields (1/2/3)
+and populates all required incident metadata fields."""
+            parameters {
+                type = object
+                properties {
+                    clean_text {
+                        type = string
+                        description = "PII-scrubbed incident description text"
+                    }
+                    category {
+                        type = string
+                        description = "Incident category: Network, Database, Hardware, or IAM"
+                    }
+                    priority {
+                        type = string
+                        description = "Incident priority: HIGH, MEDIUM, or LOW"
+                    }
+                }
+                required = [
+                    "clean_text"
+                    "category"
+                    "priority"
+                ]
+            }
+        }
+        class = "tools.ticket_builder.TicketBuilderTool"
     }
 ]
