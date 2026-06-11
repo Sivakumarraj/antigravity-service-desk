@@ -1,30 +1,144 @@
 # registries/it_service_desk.hocon
-network_name = "IT_Service_Desk_AutoClassify"
-version = "1.0.0"
+#
+# Enterprise IT Service Desk Auto-Classifier
+# A native Neuro SAN multi-agent network for automated IT incident triage.
+#
+# Agent pipeline:
+#   it_service_desk (front agent)
+#       → pii_scrubber   (redacts phone numbers, credentials, email headers)
+#       → ticket_classifier (outputs structured ServiceNow-ready JSON)
 
-# Enterprise Fallback Configuration Policy
-llm_default_config {
-  provider = "google"
-  model_name = "gemini-1.5-flash"
-  fallbacks = [
-    { provider = "google", model_name = "gemini-1.5-pro" }
-  ]
+llm_config {
+    class = "gemini"
+    model_name = "gemini-2.5-flash"
 }
 
-agents {
-  # Stage 2 Execution Boundary
-  ingestion_agent {
-    role = "PII Data Cleansing and Redaction Specialist"
-    system_prompt = "You process raw user communications. Extract the core technical root cause, redact direct identifiers, and pass clean context forward via sly_data boundary layers."
-    can_delegate_to = ["structured_classifier_agent"]
-  }
+tools = [
 
-  # Stage 3 Execution Boundary with strict schema guardrails
-  structured_classifier_agent {
-    role = "Strict Enterprise JSON Structurer"
-    system_prompt = """Analyze the scrubbed system issue text. Output a strict JSON structure containing keys: 'category', 'priority', and 'justification'. 
-    Allowed categories: Network, Database, Hardware, IAM. 
-    Allowed priorities: HIGH, MEDIUM, LOW.
-    Do not output conversational text or markdown wrappers outside the JSON string."""
-  }
+    # ------------------------------------------------------------------
+    # Front agent — entry point for all incoming IT support requests
+    # ------------------------------------------------------------------
+    {
+        name = "it_service_desk"
+        function {
+            description = """An enterprise IT helpdesk orchestrator that receives raw IT
+support requests, routes them through a PII scrubbing stage, classifies the
+incident by category and priority, and returns a structured ServiceNow-ready
+incident payload — with zero human intervention."""
+            parameters {
+                type = object
+                properties {
+                    user_request {
+                        type = string
+                        description = "Raw IT support request, email body, or incident description submitted by a user"
+                    }
+                }
+                required = [
+                    "user_request"
+                ]
+            }
+        }
+        instructions = """You are an enterprise IT helpdesk pipeline orchestrator.
+
+When you receive a user_request you MUST follow this exact three-step pipeline:
+
+Step 1: Call pii_scrubber with the raw user_request text.
+Step 2: Pass the scrubbed text output from Step 1 to ticket_classifier.
+Step 3: Return the final JSON classification result from ticket_classifier
+        directly to the user as your response.
+
+Never skip or reorder steps. Never attempt to classify the ticket yourself.
+Always run the full pipeline before responding."""
+        tools = [
+            "pii_scrubber"
+            "ticket_classifier"
+        ]
+    }
+
+    # ------------------------------------------------------------------
+    # PII scrubber agent — removes sensitive data before LLM processing
+    # ------------------------------------------------------------------
+    {
+        name = "pii_scrubber"
+        function {
+            description = """Removes personally identifiable information (PII) and sensitive
+credentials from raw IT support text before it is processed by any LLM.
+Redacts phone numbers, email addresses, passwords, API keys, bearer tokens,
+and email routing headers (From:, To:, Cc:, Date:)."""
+            parameters {
+                type = object
+                properties {
+                    raw_text {
+                        type = string
+                        description = "Raw IT support text that may contain PII or credentials"
+                    }
+                }
+                required = [
+                    "raw_text"
+                ]
+            }
+        }
+        instructions = """You are a strict PII and credential redaction specialist.
+Your sole responsibility is to sanitize the provided text.
+
+Replace every occurrence of the following with the token [REDACTED]:
+- Phone numbers in any format (e.g. +1-800-555-0199, (512) 867-5309)
+- Email addresses (e.g. user@company.com)
+- Passwords, tokens, API keys, secrets, bearer tokens (structured or prose)
+  Examples: password=abc123, token: xyz, password was dbPass123
+- All email header lines beginning with From:, To:, Cc:, Bcc:, Date:, Reply-To:
+
+Return only the sanitized text. Do not add commentary or explanations."""
+    }
+
+    # ------------------------------------------------------------------
+    # Ticket classifier agent — structured ServiceNow incident output
+    # ------------------------------------------------------------------
+    {
+        name = "ticket_classifier"
+        function {
+            description = """Classifies a PII-scrubbed IT support request into a validated
+ServiceNow incident structure. Enforces strict controlled vocabularies for
+category (Network, Database, Hardware, IAM) and priority (HIGH, MEDIUM, LOW)
+to eliminate LLM hallucinations and schema drift."""
+            parameters {
+                type = object
+                properties {
+                    clean_text {
+                        type = string
+                        description = "PII-scrubbed IT support text ready for classification"
+                    }
+                }
+                required = [
+                    "clean_text"
+                ]
+            }
+        }
+        instructions = """You are a strict enterprise IT incident classifier.
+
+Analyze the provided clean_text and output ONLY a valid JSON object with
+exactly these three keys:
+
+{
+  "category": "<exactly one of: Network, Database, Hardware, IAM>",
+  "priority": "<exactly one of: HIGH, MEDIUM, LOW>",
+  "justification": "<single sentence explaining your classification>"
 }
+
+Category rules:
+- Network:  connectivity loss, VPN failure, DNS errors, firewall blocks, latency
+- Database: DB timeouts, query failures, replication lag, cluster unreachable
+- Hardware: disk failures, memory errors, physical server down, device fault
+- IAM:      login denied, access revoked, password reset needed, permission gap
+
+Priority rules:
+- HIGH:   production system down, data loss risk, 50+ users blocked, security breach
+- MEDIUM: degraded performance, workaround available, 10-50 users affected
+- LOW:    single user affected, cosmetic issue, non-urgent enhancement
+
+Rules:
+- Output ONLY the JSON object above — no markdown fences, no extra keys
+- Never use values outside the controlled vocabulary lists above
+- justification must be one sentence, maximum 200 characters"""
+    }
+]
