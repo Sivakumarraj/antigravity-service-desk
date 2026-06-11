@@ -1,6 +1,6 @@
 # Enterprise IT Service Desk — Neuro SAN Community Project
 
-> **A native [Neuro SAN](https://github.com/cognizant-ai-lab/neuro-san) multi-agent pipeline
+> **A native [Neuro SAN STUDIO](https://github.com/cognizant-ai-lab/neuro-san-studio) multi-agent pipeline
 > that automatically classifies IT support requests into structured ServiceNow incident
 > payloads — with 5-pass PII redaction, LLM-powered classification, and deterministic
 > coded-tool output validation.**
