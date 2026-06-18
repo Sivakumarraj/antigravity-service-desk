@@ -10,7 +10,7 @@
 #       → ticket_builder    (coded tool — builds final ServiceNow payload)
 #
 # Passes ns check-config with gemini-2.5-flash (verified).
-# Community project — see: https://github.com/Sivakumarraj/antigravity-service-desk
+# Community project — see: https://github.com
 
 llm_config {
     class = "gemini"
@@ -64,8 +64,8 @@ Rules:
 - Never expose PII — always pass through pii_scrubber first.
 - Return the ticket_builder output exactly as-is."""
         tools = [
-            "pii_scrubber"
-            "ticket_classifier"
+            "pii_scrubber",
+            "ticket_classifier",
             "ticket_builder"
         ]
     }
@@ -93,7 +93,7 @@ prose credentials (password was X), and email header lines (From:, To:)."""
                 ]
             }
         }
-        class = "tools.pii_scrubber.PiiScrubberTool"
+        class = "coded_tools.pii_scrubber.PiiScrubberTool"
     }
 
     # ------------------------------------------------------------------
@@ -171,12 +171,12 @@ and populates all required incident metadata fields."""
                     }
                 }
                 required = [
-                    "clean_text"
-                    "category"
+                    "clean_text",
+                    "category",
                     "priority"
                 ]
             }
         }
-        class = "tools.ticket_builder.TicketBuilderTool"
+        class = "coded_tools.ticket_builder.TicketBuilderTool"
     }
 ]
