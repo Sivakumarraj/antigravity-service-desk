@@ -3,7 +3,7 @@ name = "neuro-san-service-desk-pipeline"
 version = "0.1.0"
 description = "Enterprise IT Service Desk auto-classifier: PII scrubbing, Pydantic guardrails, and ServiceNow incident payload generation using Neuro SAN multi-agent framework."
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
     "neuro-san-studio>=0.3.2",
 ]

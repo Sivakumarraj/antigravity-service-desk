@@ -3,30 +3,87 @@
 # Local simulation demo for the Enterprise IT Service Desk pipeline.
 #
 # This script simulates the Neuro SAN agent pipeline locally without
-# requiring 'ns serve'. To run the full native Neuro SAN experience:
+# requiring the full server to be run.
 #
-#   uv run ns serve
-#   uv run ns chat it_service_desk
+# To run the full native Neuro SAN experience:
+#   uv run ns run
 #
-import os
+
+import asyncio
 import json
-from tools.ticket_parser import TicketParserTool
-from tools.guardrails import TicketGuardrail
+import time
+from typing import Any, Dict, Tuple
+from pydantic import BaseModel, Field, ValidationError
+
+from coded_tools.pii_scrubber import PiiScrubberTool
+from coded_tools.ticket_builder import TicketBuilderTool
 
 
-def simulate_neuro_san_pipeline(raw_user_email: str):
+# ---------------------------------------------------------------------------
+# Pydantic schema and Guardrail (localized to demo)
+# ---------------------------------------------------------------------------
+
+class ServiceNowTicketSchema(BaseModel):
+    category: str = Field(description="Must match: Network, Database, Hardware, IAM")
+    priority: str = Field(description="Must match: HIGH, MEDIUM, LOW")
+    justification: str = Field(description="System impact details summary.")
+
+    class Config:
+        extra = "forbid"
+
+
+class TicketGuardrail:
+    """Compliance tracking and FinOps observability guardrail for Neuro SAN loops."""
+
+    @classmethod
+    def validate_output(cls, raw_llm_output: str) -> Tuple[bool, Dict[str, Any], str, Dict[str, Any]]:
+        start_time = time.time()
+        try:
+            clean_str = raw_llm_output.strip().replace("```json", "").replace("```", "").strip()
+            parsed_data = json.loads(clean_str)
+            validated_data = ServiceNowTicketSchema(**parsed_data)
+            
+            # Calculate mock token metrics for FinOps observability tracking
+            input_tokens = len(raw_llm_output) // 4
+            output_tokens = len(clean_str) // 4
+            estimated_cost = ((input_tokens / 1_000_000) * 0.075) + ((output_tokens / 1_000_000) * 0.30)
+            latency = time.time() - start_time
+            
+            observability_metrics = {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "estimated_cost_usd": round(estimated_cost, 6),
+                "latency_seconds": round(latency, 4)
+            }
+            
+            return True, validated_data.model_dump(), "", observability_metrics
+            
+        except (json.JSONDecodeError, ValidationError, ValueError) as err:
+            latency = time.time() - start_time
+            error_metrics = {"latency_seconds": round(latency, 4), "estimated_cost_usd": 0.0}
+            return False, {}, str(err), error_metrics
+
+
+# ---------------------------------------------------------------------------
+# Main Pipeline Simulation
+# ---------------------------------------------------------------------------
+
+async def simulate_neuro_san_pipeline_async(raw_user_email: str):
     print("\n========================================================================")
-    print("  Neuro SAN IT Service Desk -- Auto-Classifier Pipeline")
+    print("  Neuro SAN IT Service Desk -- Auto-Classifier Pipeline (Local Demo)")
     print("========================================================================\n")
 
     print("[Stage 1] Initializing Neuro SAN Core Studio Architecture Module...")
     print("          Loaded configuration registry: config/llm_config.hocon")
     print(f"          Active Core Endpoint Engine: google/gemini-2.5-flash\n")
 
-    # Stage 2 — PII Scrubbing (simulates pii_scrubber coded tool)
+    # Stage 2 — PII Scrubbing (runs PiiScrubberTool coded tool)
     print("[Stage 2] Triggering PiiScrubberTool: Cleaning PII Data Boundaries...")
-    scrubbed_text = TicketParserTool.clean_raw_email(raw_user_email)
-    print(f"          Scrubbing Operation complete. PII instances redacted safely.\n")
+    scrubber = PiiScrubberTool()
+    scrub_result = await scrubber.async_invoke({"raw_text": raw_user_email}, {})
+    scrubbed_text = scrub_result["clean_text"]
+    redacted_count = scrub_result["redaction_count"]
+    print(f"          Scrubbing Operation complete. Redacted {redacted_count} instances safely.\n")
 
     # Stage 3 — LLM Classification (simulates ticket_classifier agent)
     print("[Stage 3] Routing Context to 'ticket_classifier' via Google Tier...")
@@ -66,25 +123,33 @@ def simulate_neuro_san_pipeline(raw_user_email: str):
             f"| Cost: ${metrics['estimated_cost_usd']} USD\n"
         )
 
-    # Stage 4 — Build ServiceNow Payload (simulates ticket_builder coded tool)
+    # Stage 4 — Build ServiceNow Payload (runs TicketBuilderTool coded tool)
     print("[Stage 4] Building Final ServiceNow Incident Payload...")
-    final_servicenow_payload = TicketParserTool.map_to_servicenow_payload(
-        clean_text=scrubbed_text,
-        category=validated_json["category"],
-        priority=validated_json["priority"],
+    builder = TicketBuilderTool()
+    final_servicenow_payload = await builder.async_invoke(
+        {
+            "clean_text": scrubbed_text,
+            "category": validated_json["category"],
+            "priority": validated_json["priority"]
+        },
+        {}
     )
 
     print("\n================ FINAL SERVICENOW METADATA PAYLOAD ================")
     print(json.dumps(final_servicenow_payload, indent=2))
     print("====================================================================\n")
-    print("Pipeline Execution Complete. State saved.")
+    print("Pipeline Simulation Complete.")
 
 
-if __name__ == "__main__":
+def main():
     # Sample IT support email — intentionally contains PII for demo purposes
     sample_email = """
     From: alice.wong@acmecorp.com
     Our prod Postgres cluster (10.12.5.200) started throwing connection timeouts.
     Call my mobile at +1-800-555-0199 for verification. Temp verification password definition was dbPass123.
     """
-    simulate_neuro_san_pipeline(sample_email)
+    asyncio.run(simulate_neuro_san_pipeline_async(sample_email))
+
+
+if __name__ == "__main__":
+    main()
