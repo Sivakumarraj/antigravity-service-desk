@@ -110,10 +110,13 @@ GOOGLE_API_KEY="AIza..."
 
 ## Running with Neuro SAN
 
-Follow the [Neuro SAN Studio setup guide](https://github.com/cognizant-ai-lab/neuro-san-studio)
-to configure your Neuro SAN environment. Once configured, register this agent network by
-adding `registries/it_service_desk.hocon` to your Neuro SAN manifest and start the server
-per the Neuro SAN Studio instructions.
+To start both the backend Neuro SAN server and the frontend client UI in this project, run the standard Neuro SAN Studio startup command:
+
+```bash
+uv run ns run
+```
+
+This will automatically load the agent network configuration defined in `registries/manifest.hocon` and serve the agents.
 
 ---
 
