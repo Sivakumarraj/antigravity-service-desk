@@ -13,7 +13,7 @@ import asyncio
 import json
 import time
 from typing import Any, Dict, Tuple
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from coded_tools.pii_scrubber import PiiScrubberTool
 from coded_tools.ticket_builder import TicketBuilderTool
@@ -28,8 +28,7 @@ class ServiceNowTicketSchema(BaseModel):
     priority: str = Field(description="Must match: HIGH, MEDIUM, LOW")
     justification: str = Field(description="System impact details summary.")
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class TicketGuardrail:
