@@ -31,34 +31,34 @@ four agents arranged in a pipeline:
 
 ```
 User Input (raw IT support email)
-        │
-        ▼
-┌───────────────────────┐
-│   it_service_desk     │  LLM Agent — Front orchestrator.
-│                       │  Coordinates the full pipeline.
-└──────────┬────────────┘
-           │
-           ▼
-┌───────────────────────┐
-│    pii_scrubber       │  Coded Tool (no LLM — deterministic regex).
-│                       │  5-pass PII redaction: removes phone numbers,
-│                       │  email addresses, passwords, tokens, headers.
-└──────────┬────────────┘
-           │  clean_text
-           ▼
-┌───────────────────────┐
-│  ticket_classifier    │  LLM Agent (gemini-2.5-flash).
-│                       │  Classifies: category (Network/Database/Hardware/IAM)
-│                       │  and priority (HIGH/MEDIUM/LOW).
-└──────────┬────────────┘
-           │  category + priority
-           ▼
-┌───────────────────────┐
-│   ticket_builder      │  Coded Tool (no LLM — deterministic mapping).
-│                       │  Builds complete ServiceNow Incident Table payload.
-└──────────┬────────────┘
-           │
-           ▼
+        |
+        v
++----------------------------+
+|   it_service_desk          |  LLM Agent — Front orchestrator.
+|                            |  Coordinates the full pipeline.
++------------+---------------+
+             |
+             v
++----------------------------+
+|    pii_scrubber            |  Coded Tool (no LLM — deterministic regex).
+|                            |  5-pass PII redaction: removes phone numbers,
+|                            |  email addresses, passwords, tokens, headers.
++------------+---------------+
+             |  clean_text
+             v
++----------------------------+
+|  ticket_classifier         |  LLM Agent (gemini-2.5-flash).
+|                            |  Classifies: category (Network/Database/Hardware/IAM)
+|                            |  and priority (HIGH/MEDIUM/LOW).
++------------+---------------+
+             |  category + priority
+             v
++----------------------------+
+|   ticket_builder           |  Coded Tool (no LLM — deterministic mapping).
+|                            |  Builds complete ServiceNow Incident Table payload.
++------------+---------------+
+             |
+             v
    ServiceNow Incident Payload (JSON)
 ```
 
@@ -69,14 +69,15 @@ User Input (raw IT support email)
 ```
 antigravity-service-desk/
 ├── registries/
-│   ├── it_service_desk.hocon   ← Native Neuro SAN agent network definition
-│   └── manifest.hocon          ← Registers the agent network
+│   ├── it_service_desk.hocon   <- Native Neuro SAN agent network definition
+│   └── manifest.hocon          <- Registers the agent network
 ├── coded_tools/
-│   ├── pii_scrubber.py         ← CodedTool: 5-pass PII redaction
-│   └── ticket_builder.py       ← CodedTool: ServiceNow payload builder
+│   ├── __init__.py
+│   ├── pii_scrubber.py         <- CodedTool: 5-pass PII redaction
+│   └── ticket_builder.py       <- CodedTool: ServiceNow payload builder
 ├── config/
-│   └── llm_config.hocon        ← Default LLM: gemini-2.5-flash
-├── demo.py                     ← Standalone local demo (no server needed)
+│   └── llm_config.hocon        <- Default LLM: gemini-2.5-flash
+├── demo.py                     <- Standalone local demo (no server needed)
 ├── pyproject.toml
 └── README.md
 ```
@@ -108,53 +109,27 @@ GOOGLE_API_KEY="AIza..."
 
 ---
 
-## Running with Neuro SAN
+## Running with Neuro SAN Studio
 
-To start both the backend Neuro SAN server and the frontend client UI in this project, run the standard Neuro SAN Studio startup command:
+Start the Neuro SAN server and web client:
 
 ```bash
 uv run ns run
 ```
 
-This will automatically load the agent network configuration defined in `registries/manifest.hocon` and serve the agents.
+This loads the agent network from `registries/manifest.hocon`, sets
+`AGENT_TOOL_PATH` to the `coded_tools/` directory, and serves the
+`it_service_desk` agent network on `http://localhost:8080`.
 
----
-
-## Running the Local Demo
-
-A standalone simulation that does not require a running Neuro SAN server:
+To start only the backend server (no web UI):
 
 ```bash
-uv run python demo.py
-```
-
-Expected output:
-
-```
-[Stage 1] Initializing Neuro SAN Core Studio Architecture Module...
-          Active Core Endpoint Engine: google/gemini-2.5-flash
-
-[Stage 2] PiiScrubberTool: Cleaning PII Data Boundaries...
-          Scrubbing complete. PII instances redacted safely.
-
-[Stage 3] Routing to ticket_classifier via Google Tier...
-          [LLM] Calling google/gemini-2.5-flash ...
-          [GUARDRAIL] Validation cleared successfully.
-
-[Stage 4] Building Final ServiceNow Incident Payload...
-
-{
-  "short_description": "Our prod Postgres cluster started throwing connection timeouts.",
-  "category": "Database",
-  "priority": "1",
-  "urgency": "1",
-  ...
-}
+uv run ns run --server-only
 ```
 
 ---
 
-## Verifying the Neuro SAN Config
+## Verifying the Agent Network Config
 
 ```bash
 uv run ns check-config --hocon-path registries/it_service_desk.hocon
@@ -170,6 +145,16 @@ All LLM configurations are working.
 
 ---
 
+## Running the Local Demo
+
+A standalone simulation that exercises the coded tools without a running server:
+
+```bash
+uv run python demo.py
+```
+
+---
+
 ## Coded Tools
 
 Coded tools inherit from `neuro_san.interfaces.coded_tool.CodedTool` and implement
@@ -177,8 +162,8 @@ Coded tools inherit from `neuro_san.interfaces.coded_tool.CodedTool` and impleme
 
 | Tool | Class | Purpose |
 |---|---|---|
-| `pii_scrubber` | `coded_tools.pii_scrubber.PiiScrubberTool` | 5-pass regex PII redaction |
-| `ticket_builder` | `coded_tools.ticket_builder.TicketBuilderTool` | ServiceNow payload builder |
+| `pii_scrubber` | `pii_scrubber.PiiScrubberTool` | 5-pass regex PII redaction |
+| `ticket_builder` | `ticket_builder.TicketBuilderTool` | ServiceNow payload builder |
 
 ---
 
@@ -186,11 +171,11 @@ Coded tools inherit from `neuro_san.interfaces.coded_tool.CodedTool` and impleme
 
 | Pass | Pattern | Example |
 |---|---|---|
-| 1 | Email headers | `From: alice@acme.com` → removed |
-| 2a | Structured credentials | `password=dbPass123` → `password=[REDACTED]` |
-| 2b | Prose credentials | `password was dbPass123` → `password=[REDACTED]` |
-| 3 | Phone numbers | `+1-800-555-0199` → `[REDACTED]` |
-| 4 | Email addresses | `user@company.com` → `[REDACTED]` |
+| 1 | Email headers | `From: alice@acme.com` -> removed |
+| 2a | Structured credentials | `password=dbPass123` -> `password=[REDACTED]` |
+| 2b | Prose credentials | `password was dbPass123` -> `password=[REDACTED]` |
+| 3 | Phone numbers | `+1-800-555-0199` -> `[REDACTED]` |
+| 4 | Email addresses | `user@company.com` -> `[REDACTED]` |
 
 ---
 

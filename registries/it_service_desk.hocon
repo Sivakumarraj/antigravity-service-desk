@@ -1,125 +1,103 @@
-# registries/it_service_desk.hocon
+# Copyright 2025 Sivakumarraj
 #
-# Enterprise IT Service Desk — Auto-Classifier Agent Network
-# A native Neuro SAN multi-agent network for automated IT incident triage.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# Agent pipeline:
-#   it_service_desk   (front orchestrator — entry point)
-#       → pii_scrubber      (coded tool — 5-pass regex PII redaction)
-#       → ticket_classifier (LLM agent — structured ServiceNow JSON output)
-#       → ticket_builder    (coded tool — builds final ServiceNow payload)
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-# Passes ns check-config with gemini-2.5-flash (verified).
-# Community project — see: https://github.com
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+{
+    "metadata": {
+        "description": "Enterprise IT helpdesk automation pipeline that receives raw support emails, redacts PII, classifies incidents by category and priority, and produces structured ServiceNow-ready incident payloads."
+        "tags": ["itsm", "servicenow", "pii", "enterprise", "it-helpdesk"]
+        "sample_queries": [
+            "From: alice.wong@acmecorp.com\nOur prod Postgres cluster started throwing connection timeouts. Call +1-800-555-0199. Password was dbPass123.",
+            "I can't connect to the VPN since this morning. Getting error DNS_PROBE_FINISHED.",
+            "My Active Directory account got locked after too many failed login attempts."
+        ]
+    },
 
-llm_config {
-    class = "gemini"
-    model_name = "gemini-2.5-flash"
-}
+    include "config/llm_config.hocon",
 
-metadata {
-    description = """Enterprise IT helpdesk automation pipeline that receives raw support
-emails, redacts PII, classifies incidents by category and priority, and produces
-structured ServiceNow-ready incident payloads — with zero human intervention."""
-    tags = ["itsm", "servicenow", "pii", "enterprise", "it-helpdesk"]
-}
+    "tools": [
 
-tools = [
-
-    # ------------------------------------------------------------------
-    # Front agent — entry point for all incoming IT support requests
-    # ------------------------------------------------------------------
-    {
-        name = "it_service_desk"
-        function {
-            description = """Enterprise IT helpdesk orchestrator. Receives a raw IT support
+        # Front agent — entry point for all incoming IT support requests.
+        # This is the "Front Man" and must be the first tool in the array.
+        {
+            "name": "it_service_desk",
+            "function": {
+                "description": """Enterprise IT helpdesk orchestrator. Receives a raw IT support
 request (email, chat message, or incident report), routes it through a
 PII scrubbing stage, classifies the incident, and returns a structured
-ServiceNow incident payload — with zero human intervention."""
-            parameters {
-                type = object
-                properties {
-                    user_request {
-                        type = string
-                        description = "Raw IT support request, email body, or incident description from a user"
-                    }
-                }
-                required = [
-                    "user_request"
-                ]
-            }
-        }
-        instructions = """You are an enterprise IT helpdesk pipeline orchestrator.
+ServiceNow incident payload."""
+            },
+            "instructions": """You are an enterprise IT helpdesk pipeline orchestrator.
 
-When you receive a user_request you MUST execute this exact pipeline in order:
+When you receive a user request you MUST execute this exact pipeline in order:
 
-Step 1 — Call pii_scrubber with the raw user_request text.
-Step 2 — Pass the clean_text output from Step 1 to ticket_classifier.
-Step 3 — Pass the category, priority, and clean_text to ticket_builder.
-Step 4 — Return the final ServiceNow payload from ticket_builder to the user.
+Step 1 - Call pii_scrubber with the raw user request text.
+Step 2 - Pass the clean_text output from Step 1 to ticket_classifier.
+Step 3 - Pass the category, priority, and clean_text to ticket_builder.
+Step 4 - Return the final ServiceNow payload from ticket_builder to the user.
 
 Rules:
 - Never skip or reorder steps.
 - Never classify the ticket yourself without calling ticket_classifier.
-- Never expose PII — always pass through pii_scrubber first.
-- Return the ticket_builder output exactly as-is."""
-        tools = [
-            "pii_scrubber",
-            "ticket_classifier",
-            "ticket_builder"
-        ]
-    }
+- Never expose PII. Always pass through pii_scrubber first.
+- Return the ticket_builder output exactly as-is.""",
+            "tools": [
+                "pii_scrubber",
+                "ticket_classifier",
+                "ticket_builder"
+            ]
+        },
 
-    # ------------------------------------------------------------------
-    # PII scrubber — coded tool (no LLM, pure regex, deterministic)
-    # ------------------------------------------------------------------
-    {
-        name = "pii_scrubber"
-        function {
-            description = """Coded tool. Removes PII and credentials from raw IT support text
-using 5-pass regex redaction before the text reaches any LLM. Handles:
-phone numbers, email addresses, structured credentials (password=X),
-prose credentials (password was X), and email header lines (From:, To:)."""
-            parameters {
-                type = object
-                properties {
-                    raw_text {
-                        type = string
-                        description = "Raw IT support text that may contain PII or credentials"
-                    }
+        # PII scrubber — coded tool (no LLM, pure regex, deterministic)
+        {
+            "name": "pii_scrubber",
+            "function": {
+                "description": """Coded tool. Removes PII and credentials from raw IT support text
+using 5-pass regex redaction before the text reaches any LLM. Handles
+phone numbers, email addresses, structured credentials, prose credentials,
+and email header lines.""",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "raw_text": {
+                            "type": "string",
+                            "description": "Raw IT support text that may contain PII or credentials"
+                        }
+                    },
+                    "required": ["raw_text"]
                 }
-                required = [
-                    "raw_text"
-                ]
-            }
-        }
-        class = "coded_tools.pii_scrubber.PiiScrubberTool"
-    }
+            },
+            "class": "pii_scrubber.PiiScrubberTool"
+        },
 
-    # ------------------------------------------------------------------
-    # Ticket classifier — LLM agent with strict output vocabulary
-    # ------------------------------------------------------------------
-    {
-        name = "ticket_classifier"
-        function {
-            description = """Classifies a PII-scrubbed IT support request into a structured
-incident definition. Enforces strict controlled vocabularies for category
-(Network, Database, Hardware, IAM) and priority (HIGH, MEDIUM, LOW) to
-eliminate LLM hallucinations and schema drift."""
-            parameters {
-                type = object
-                properties {
-                    clean_text {
-                        type = string
-                        description = "PII-scrubbed IT support text ready for classification"
-                    }
+        # Ticket classifier — LLM agent with strict output vocabulary
+        {
+            "name": "ticket_classifier",
+            "function": {
+                "description": """Classifies a PII-scrubbed IT support request into a structured
+incident definition with category (Network, Database, Hardware, IAM)
+and priority (HIGH, MEDIUM, LOW).""",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "clean_text": {
+                            "type": "string",
+                            "description": "PII-scrubbed IT support text ready for classification"
+                        }
+                    },
+                    "required": ["clean_text"]
                 }
-                required = [
-                    "clean_text"
-                ]
-            }
-        }
-        instructions = """You are a strict enterprise IT incident classifier.
+            },
+            "instructions": """You are a strict enterprise IT incident classifier.
 
 Analyze the provided clean_text and output ONLY a valid JSON object with
 exactly these three keys:
@@ -142,41 +120,35 @@ Priority rules:
 - LOW:    single user affected, cosmetic issue, non-urgent enhancement
 
 Output ONLY the JSON object. No markdown fences. No explanatory text. No extra keys."""
-    }
+        },
 
-    # ------------------------------------------------------------------
-    # Ticket builder — coded tool (no LLM, builds final ServiceNow JSON)
-    # ------------------------------------------------------------------
-    {
-        name = "ticket_builder"
-        function {
-            description = """Coded tool. Builds a complete ServiceNow Incident Table JSON
-payload from the classifier's output. Maps Neuro SAN priority labels
-(HIGH/MEDIUM/LOW) to ServiceNow urgency/impact/priority fields (1/2/3)
-and populates all required incident metadata fields."""
-            parameters {
-                type = object
-                properties {
-                    clean_text {
-                        type = string
-                        description = "PII-scrubbed incident description text"
-                    }
-                    category {
-                        type = string
-                        description = "Incident category: Network, Database, Hardware, or IAM"
-                    }
-                    priority {
-                        type = string
-                        description = "Incident priority: HIGH, MEDIUM, or LOW"
-                    }
+        # Ticket builder — coded tool (no LLM, builds final ServiceNow JSON)
+        {
+            "name": "ticket_builder",
+            "function": {
+                "description": """Coded tool. Builds a complete ServiceNow Incident Table JSON
+payload from the classifier output. Maps priority labels (HIGH/MEDIUM/LOW)
+to ServiceNow urgency/impact/priority fields (1/2/3).""",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "clean_text": {
+                            "type": "string",
+                            "description": "PII-scrubbed incident description text"
+                        },
+                        "category": {
+                            "type": "string",
+                            "description": "Incident category: Network, Database, Hardware, or IAM"
+                        },
+                        "priority": {
+                            "type": "string",
+                            "description": "Incident priority: HIGH, MEDIUM, or LOW"
+                        }
+                    },
+                    "required": ["clean_text", "category", "priority"]
                 }
-                required = [
-                    "clean_text",
-                    "category",
-                    "priority"
-                ]
-            }
+            },
+            "class": "ticket_builder.TicketBuilderTool"
         }
-        class = "coded_tools.ticket_builder.TicketBuilderTool"
-    }
-]
+    ]
+}
