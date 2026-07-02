@@ -42,6 +42,8 @@ htmlcov/
 
 # --- Pipeline output (generated at runtime — do not commit) ---
 antigravity_apps/service_desk/output/
+logs/
+nss_local.db
 
 # --- Secrets / local config overrides ---
 .env.local
